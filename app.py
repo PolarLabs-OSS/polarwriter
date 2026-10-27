@@ -1,3 +1,4 @@
+import json
 import sys
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox
@@ -34,6 +35,15 @@ def main():
     url_entry=tk.Entry(settings,textvariable=address,font=("Segoe UI",10))
     url_entry.grid(row=1,column=0,sticky="ew",padx=(0,10),ipady=6)
     chosen=tk.StringVar()
+    config_path=Path.home()/".polaragents"/(APP_SLUG+".json")
+    try:
+        saved=json.loads(config_path.read_text(encoding="utf-8"))
+        address.set(saved.get("url",address.get()))
+        chosen.set(saved.get("model",""))
+    except (OSError,ValueError,TypeError):pass
+    def save_config():
+        config_path.parent.mkdir(parents=True,exist_ok=True)
+        config_path.write_text(json.dumps({"url":address.get(),"model":chosen.get()},indent=2),encoding="utf-8")
     picker=ttk.Combobox(settings,textvariable=chosen,width=22)
     picker.grid(row=1,column=1,sticky="ew",padx=(0,10))
     settings.grid_columnconfigure(0,weight=2);settings.grid_columnconfigure(1,weight=1)
@@ -51,7 +61,10 @@ def main():
             try:fn()
             except Exception as exc:
                 message=str(exc)
-                root.after(0,lambda:status.set("Errore: "+message))
+                def failed():
+                    working["busy"]=False
+                    status.set("Errore: "+message)
+                root.after(0,failed)
         Thread(target=run,daemon=True).start()
     def connect():
         status.set("Connessione…")
@@ -59,7 +72,8 @@ def main():
             found=list_models(address.get())
             def done():
                 picker["values"]=found
-                if found:chosen.set(found[0])
+                if found and chosen.get() not in found:chosen.set(found[0])
+                save_config()
                 status.set("Connesso: "+str(len(found))+" modelli disponibili")
             root.after(0,done)
         background(work)
@@ -87,6 +101,7 @@ def main():
         if working['busy']:return
         working['busy']=True
         stop_event.clear()
+        save_config()
         status.set("Generazione…")
         def approval(action,path,details):
             ready=Event();answer={"allowed":False}

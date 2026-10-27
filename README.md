@@ -8,7 +8,7 @@ Legge testo, suggerisce revisioni e salva bozze TXT/MD. Il modello può sceglier
 
 ## Installazione Windows
 
-Scarica l'archivio Windows x64, estrai l'intera cartella e avvia polarwriter-v0.2.exe. Non occorre installare Python. L'eseguibile è unsigned: le policy di sicurezza potrebbero bloccarlo. Windows ARM64 può usare l'emulazione x64.
+Scarica l'archivio Windows x64, estrai l'intera cartella e avvia polarwriter-v0.3.exe. Non occorre installare Python. L'eseguibile è unsigned: le policy di sicurezza potrebbero bloccarlo. Windows ARM64 può usare l'emulazione x64.
 
 ## Configurazione
 

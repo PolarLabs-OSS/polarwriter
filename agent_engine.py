@@ -30,7 +30,8 @@ def run_tool(tool,args,folder,approve):
             return json.dumps({"columns":rdr.fieldnames,"rows":len(rows),"sample":rows[:5]},ensure_ascii=False)
     if tool=="save_text":
         if path.suffix.lower() not in (".txt",".md",".json",".csv"):raise ValueError("Estensione non consentita")
-        content=str(args.get("content",""))[:200000]
+        content=str(args.get("content",""))
+        if len(content)>200000:raise ValueError("Output troppo grande")
         if not approve("Scrivere",str(path),content[:500]):return "RIFIUTATO"
         path.parent.mkdir(parents=True,exist_ok=True)
         if path.exists():shutil.copy2(path,str(path)+".bak")
@@ -51,20 +52,32 @@ def run_tool(tool,args,folder,approve):
         path.write_text(data.replace(old,new,1),encoding="utf-8")
         return "MODIFICATO"
     raise ValueError("Strumento non valido")
-def execute(goal,app,folder,model_fn,approve,log):
+def execute(goal,app,folder,model_fn,approve,log,stopped=lambda:False,specialty=''):
     allowed=tools(app)
     system=("Sei un agente PolarLabs. Restituisci ESCLUSIVAMENTE JSON nella forma "
       + '{"tool":"nome","args":{}}'+". Un passo alla volta. Strumenti: "+", ".join(allowed)
       +". Schemi: list_files {path}; read_text {path}; search_text {path,query}; csv_summary {path}; "
       +"save_text {path,content}; move_file {path,destination}; replace_text {path,find,replace}; finish {answer}. "
-      +"Usa percorsi relativi alla cartella indicata. Non inventare i risultati.")
+      +"Usa percorsi relativi alla cartella indicata. Non inventare i risultati. "
+      +"Specializzazione: "+specialty)
     history=[{"role":"system","content":system},{"role":"user","content":goal}]
     for index in range(MAX_STEPS):
+        if stopped():return 'Operazione interrotta dall utente.'
         result=model_fn(history).strip()
+        if stopped():return 'Operazione interrotta dall utente.'
         try:
-            action=json.loads(result)
-            if not isinstance(action,dict):raise ValueError("Not object")
-        except ValueError:
+            candidate=result
+            if candidate.startswith(chr(96)*3):
+                candidate=candidate.split("\n",1)[-1]
+                candidate=candidate.rsplit(chr(96)*3,1)[0].strip()
+            try:
+                action=json.loads(candidate)
+            except ValueError:
+                start=candidate.find("{")
+                action=json.JSONDecoder().raw_decode(candidate[start:])[0] if start>=0 else None
+            if not isinstance(action,dict):
+                raise ValueError("Not an object")
+        except (ValueError,TypeError):
             action={"tool":"finish","args":{"answer":result}}
         name=action.get("tool","finish");args=action.get("args",{})
         if not isinstance(args,dict):args={}

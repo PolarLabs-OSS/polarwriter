@@ -1,3 +1,4 @@
+import sys
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox
 from pathlib import Path
@@ -13,7 +14,11 @@ SYSTEM='Scrivi, correggi o riassumi il testo.'
 def main():
     root=tk.Tk()
     root.title(TITLE+" | PolarLabs")
-    root.geometry("840x720")
+    try:
+        icon_root=Path(getattr(sys,"_MEIPASS",Path(__file__).resolve().parent))
+        root.iconbitmap(default=str(icon_root/("polarwriter"+".ico")))
+    except (OSError,tk.TclError):pass
+    root.geometry("900x820")
     root.minsize(650,520)
     root.configure(bg="#F7FAFC")
     navy="#09263B"; teal="#138A91"; bg="#F7FAFC"
@@ -72,11 +77,16 @@ def main():
             inputbox.insert("1.0",Path(filename).read_text(encoding="utf-8"))
         except Exception as exc:messagebox.showerror(TITLE,str(exc))
     tk.Button(actions,text="Apri file",command=load,relief="flat",bg="#EEF5F8",fg=navy,padx=13,pady=8).pack(side="left")
+    stop_event=Event()
+    working={'busy':False}
     def submit():
         prompt=inputbox.get("1.0","end-1c").strip()
         if not prompt or not chosen.get():
             messagebox.showwarning(TITLE,"Inserisci il testo e seleziona un modello.")
             return
+        if working['busy']:return
+        working['busy']=True
+        stop_event.clear()
         status.set("Generazione…")
         def approval(action,path,details):
             ready=Event();answer={"allowed":False}
@@ -86,22 +96,33 @@ def main():
                 ready.set()
             root.after(0,show)
             ready.wait()
-            return answer["allowed"]
+            return answer["allowed"] and not stop_event.is_set()
         def log(text):
-            root.after(0,lambda value=text:status.set(value))
+            def update():
+                status.set(text)
+                logbox.configure(state="normal")
+                logbox.insert("end",text+"\n")
+                logbox.see("end")
+                logbox.configure(state="disabled")
+            root.after(0,update)
         def work():
             response=execute(prompt,APP_SLUG,workspace.get(),
                 lambda messages: generate_messages(address.get(),chosen.get(),messages),
-                approval,log)
+                approval,log,stop_event.is_set,specialty=SYSTEM)
             def done():
+                working['busy']=False
                 output.delete("1.0","end");output.insert("1.0",response)
                 status.set("Attività completata")
             root.after(0,done)
         background(work)
-    tk.Button(actions,text="Genera",command=submit,bg=teal,fg="white",relief="flat",padx=16,pady=8).pack(side="right")
+    tk.Button(actions,text="Interrompi",command=stop_event.set,bg="#E8EBF2",fg=navy,relief="flat",padx=14,pady=8).pack(side="right",padx=(8,0))
+    tk.Button(actions,text="Avvia agente",command=submit,bg=teal,fg="white",relief="flat",padx=16,pady=8).pack(side="right")
     tk.Label(root,text="Risultato",fg=navy,bg=bg,font=("Segoe UI",11,"bold")).pack(anchor="w",padx=24)
     output=tk.Text(root,height=10,wrap="word",font=("Segoe UI",10),bg="white",fg=navy)
     output.pack(fill="both",expand=True,padx=24,pady=(5,8))
+    tk.Label(root,text="Registro delle operazioni",fg=navy,bg=bg,font=("Segoe UI",10,"bold")).pack(anchor="w",padx=24)
+    logbox=tk.Text(root,height=4,wrap="word",font=("Consolas",9),bg="#EEF5F8",fg=navy,state="disabled")
+    logbox.pack(fill="x",padx=24,pady=(4,8))
     def export():
         filename=filedialog.asksaveasfilename(defaultextension=".txt",filetypes=[("Testo","*.txt"),("Markdown","*.md")])
         if filename:Path(filename).write_text(output.get("1.0","end-1c"),encoding="utf-8")

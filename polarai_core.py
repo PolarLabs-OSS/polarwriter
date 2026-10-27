@@ -23,3 +23,8 @@ def list_models(url):
 def generate(url,model,system,prompt):
     result=_call(url,"/chat/completions",{"model":model,"messages":[{"role":"system","content":system},{"role":"user","content":prompt}],"stream":False})
     return result["choices"][0]["message"]["content"]
+
+
+def generate_messages(url,model,messages):
+    result=_call(url,"/chat/completions",{"model":model,"messages":messages,"stream":False,"temperature":0.1})
+    return result["choices"][0]["message"]["content"]

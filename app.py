@@ -3,7 +3,11 @@ from tkinter import ttk,filedialog,messagebox
 from pathlib import Path
 from threading import Thread
 from polarai_core import list_models,generate
+from agent_engine import execute
+from polarai_core import generate_messages
+from threading import Event
 
+APP_SLUG='polarwriter'
 TITLE='PolarWriter'
 SYSTEM='Scrivi, correggi o riassumi il testo.'
 def main():
@@ -28,7 +32,15 @@ def main():
     picker=ttk.Combobox(settings,textvariable=chosen,width=22)
     picker.grid(row=1,column=1,sticky="ew",padx=(0,10))
     settings.grid_columnconfigure(0,weight=2);settings.grid_columnconfigure(1,weight=1)
-    status=tk.StringVar(value="Pronto. Avvia LM Studio, Ollama o altro server API compatibile.")
+    status=tk.StringVar(value="Pronto. Avvia un server AI locale.")
+    workspace=tk.StringVar(value=str(Path.home()/"Documents"))
+    def select_folder():
+        selected=filedialog.askdirectory(initialdir=workspace.get())
+        if selected:workspace.set(selected)
+    workspace_row=tk.Frame(root,bg=bg);workspace_row.pack(fill="x",padx=24,pady=6)
+    tk.Label(workspace_row,text="Cartella autorizzata:",fg=navy,bg=bg).pack(side="left")
+    tk.Entry(workspace_row,textvariable=workspace,fg=navy).pack(side="left",fill="x",expand=True,padx=8)
+    tk.Button(workspace_row,text="Scegli",command=select_folder,bg="#EEF5F8",fg=navy).pack(side="right")
     def background(fn):
         def run():
             try:fn()
@@ -66,11 +78,24 @@ def main():
             messagebox.showwarning(TITLE,"Inserisci il testo e seleziona un modello.")
             return
         status.set("Generazione…")
+        def approval(action,path,details):
+            ready=Event();answer={"allowed":False}
+            def show():
+                answer["allowed"]=messagebox.askyesno(TITLE+" - Conferma operazione",
+                    action+"\n"+path+"\n\nAnteprima:\n"+details[:900])
+                ready.set()
+            root.after(0,show)
+            ready.wait()
+            return answer["allowed"]
+        def log(text):
+            root.after(0,lambda value=text:status.set(value))
         def work():
-            response=generate(address.get(),chosen.get(),SYSTEM,prompt)
+            response=execute(prompt,APP_SLUG,workspace.get(),
+                lambda messages: generate_messages(address.get(),chosen.get(),messages),
+                approval,log)
             def done():
                 output.delete("1.0","end");output.insert("1.0",response)
-                status.set("Risposta completata")
+                status.set("Attività completata")
             root.after(0,done)
         background(work)
     tk.Button(actions,text="Genera",command=submit,bg=teal,fg="white",relief="flat",padx=16,pady=8).pack(side="right")
